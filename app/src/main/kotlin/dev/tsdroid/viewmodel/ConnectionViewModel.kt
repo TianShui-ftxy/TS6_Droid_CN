@@ -7,7 +7,9 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.graphics.BitmapFactory
 import android.os.IBinder
+import android.provider.Settings
 import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
@@ -111,6 +113,25 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         _connectionState.value = ConnectionState.CONNECTING
         _error.value = null
 
+        // Check for overlay permission before starting the service
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+            _connectionState.value = ConnectionState.DISCONNECTED
+            _error.value = "Please grant the 'Display over other apps' permission to use the floating window."
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${context.packageName}"))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            return
+        }
+
+        try {
+            val intent = Intent(context, TsConnectionService::class.java)
+            ContextCompat.startForegroundService(context, intent)
+        } catch (e: Exception) {
+            _connectionState.value = ConnectionState.DISCONNECTED
+            _error.value = e.message ?: getApplication<Application>().getString(R.string.connection_failed)
+            return
+        }
+
         // Wait for the service instance to be available
         viewModelScope.launch {
             var attempts = 0
@@ -122,7 +143,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             val service = TsConnectionService.instance
             if (service == null) {
                 _connectionState.value = ConnectionState.DISCONNECTED
-                _error.value = "Accessibility Service is not running. Please enable it in Settings."
+                _error.value = "Failed to start background service."
                 return@launch
             }
 

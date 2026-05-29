@@ -12,12 +12,13 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
-import android.accessibilityservice.AccessibilityService
-import android.view.accessibility.AccessibilityEvent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -37,9 +38,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.*
-import androidx.savedstate.SavedStateRegistry
-import androidx.savedstate.SavedStateRegistryController
-import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.tsdroid.MainActivity
 import dev.tsdroid.R
@@ -59,23 +57,25 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class TsConnectionService : AccessibilityService(), LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
-
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Stub required by AccessibilityService
-    }
-
-    override fun onInterrupt() {
-        // Stub required by AccessibilityService
-    }
+class TsConnectionService : LifecycleService() {
 
     companion object {
         private const val TAG = "TsConnService"
+        private const val NOTIFICATION_ID = 1
+        private const val ACTION_DISCONNECT = "com.flammedemon.ts6droid.DISCONNECT"
+        private const val ACTION_TOGGLE_MUTE = "com.flammedemon.ts6droid.TOGGLE_MUTE"
 
         var instance: TsConnectionService? = null
             private set
     }
 
+    inner class LocalBinder : Binder() {
+        val tsClient: TsClient get() = this@TsConnectionService.tsClient
+        val audioBridge: AudioBridge get() = this@TsConnectionService.audioBridge
+        val service: TsConnectionService get() = this@TsConnectionService
+    }
+
+    private val binder = LocalBinder()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     val tsClient = TsClient()
@@ -85,14 +85,6 @@ class TsConnectionService : AccessibilityService(), LifecycleOwner, ViewModelSto
     private lateinit var windowManager: WindowManager
     private var overlayView: ComposeView? = null
     private var overlayLayoutParams: WindowManager.LayoutParams? = null
-
-    private val lifecycleRegistry = LifecycleRegistry(this)
-    private val serviceViewModelStore = ViewModelStore()
-    private val savedStateRegistryController = SavedStateRegistryController.create(this)
-
-    override val lifecycle: Lifecycle get() = lifecycleRegistry
-    override val viewModelStore: ViewModelStore get() = serviceViewModelStore
-    override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
 
     private var overlayConnected by mutableStateOf(false)
     private var overlayChannelName by mutableStateOf<String?>(null)
@@ -105,12 +97,10 @@ class TsConnectionService : AccessibilityService(), LifecycleOwner, ViewModelSto
     override fun onCreate() {
         super.onCreate()
         instance = this
-        Log.d(TAG, "Service onCreate: Instance eagerly bound!")
-        savedStateRegistryController.performRestore(null)
+        Log.d(TAG, "Foreground Service Created")
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         audioBridge = AudioBridge(applicationContext, tsClient)
         audioBridge.initialize()
-        lifecycleRegistry.currentState = Lifecycle.State.STARTED
 
         // Listen for audio events, talk status, and play per-user mixing
         tsClient.events.onEach { event ->
@@ -157,15 +147,75 @@ class TsConnectionService : AccessibilityService(), LifecycleOwner, ViewModelSto
         }.launchIn(serviceScope)
     }
 
-    override fun onServiceConnected() {
-        super.onServiceConnected()
-        instance = this
-        Log.d(TAG, "Service onServiceConnected: OS Handshake done!")
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
+        startServiceForeground()
         
-        // If we are already connected to a server, show the overlay
-        if (overlayConnected) {
-            showFloatingWindow()
+        when (intent?.action) {
+            ACTION_DISCONNECT -> {
+                disconnect()
+            }
+            ACTION_TOGGLE_MUTE -> {
+                audioBridge.toggleMute()
+                updateNotification()
+            }
         }
+        return START_STICKY
+    }
+
+    override fun onBind(intent: Intent): IBinder {
+        super.onBind(intent)
+        return binder
+    }
+
+    private fun startServiceForeground() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification())
+            }
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification())
+        }
+    }
+
+    private fun updateNotification() {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID, buildNotification())
+    }
+
+    private fun buildNotification(): Notification {
+        val contentIntent = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val disconnectIntent = PendingIntent.getService(
+            this, 1,
+            Intent(this, TsConnectionService::class.java).apply { action = ACTION_DISCONNECT },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val muteIntent = PendingIntent.getService(
+            this, 2,
+            Intent(this, TsConnectionService::class.java).apply { action = ACTION_TOGGLE_MUTE },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val serverName = tsClient.serverInfo.value?.name ?: getString(R.string.connecting)
+        val muteLabel = getString(if (audioBridge.isMuted.value) R.string.notif_unmute else R.string.notif_mute)
+
+        return NotificationCompat.Builder(this, TsDroidApp.CHANNEL_ID_CONNECTION)
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText(serverName)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setContentIntent(contentIntent)
+            .setOngoing(true)
+            .addAction(0, muteLabel, muteIntent)
+            .addAction(0, getString(R.string.disconnect), disconnectIntent)
+            .build()
     }
 
     fun connect(address: String, identity: Identity, nickname: String, password: String?) {
@@ -186,6 +236,10 @@ class TsConnectionService : AccessibilityService(), LifecycleOwner, ViewModelSto
         audioBridge.stopCapture()
         serviceScope.launch(Dispatchers.IO) {
             tsClient.disconnect()
+            withContext(Dispatchers.Main) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
         }
     }
 
@@ -204,17 +258,22 @@ class TsConnectionService : AccessibilityService(), LifecycleOwner, ViewModelSto
             return
         }
 
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+        val displayMetrics = resources.displayMetrics
+        val widthPx = (280 * displayMetrics.density).toInt()
+        val heightPx = (350 * displayMetrics.density).toInt()
+
+        val params = WindowManager.LayoutParams().apply {
+            width = WindowManager.LayoutParams.WRAP_CONTENT
+            height = WindowManager.LayoutParams.WRAP_CONTENT
+            type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
-                WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
-            },
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT
-        ).apply {
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+            format = PixelFormat.TRANSLUCENT
+            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
             gravity = Gravity.TOP or Gravity.START
             x = 100
             y = 300
@@ -297,8 +356,6 @@ class TsConnectionService : AccessibilityService(), LifecycleOwner, ViewModelSto
 
     override fun onDestroy() {
         instance = null
-        lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
-        serviceViewModelStore.clear()
         hideFloatingWindow()
         audioBridge.release()
         serviceScope.cancel()
