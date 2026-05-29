@@ -77,6 +77,9 @@ class TsConnectionService : AccessibilityService(), LifecycleOwner, ViewModelSto
         private const val ACTION_SHOW_OVERLAY = "com.flammedemon.ts6droid.SHOW_OVERLAY"
         private const val ACTION_HIDE_OVERLAY = "com.flammedemon.ts6droid.HIDE_OVERLAY"
 
+        var instance: TsConnectionService? = null
+            private set
+
         fun start(context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(Intent(context, TsConnectionService::class.java))
@@ -143,6 +146,7 @@ class TsConnectionService : AccessibilityService(), LifecycleOwner, ViewModelSto
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         savedStateRegistryController.performRestore(null)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         audioBridge = AudioBridge(applicationContext, tsClient)
@@ -358,6 +362,7 @@ class TsConnectionService : AccessibilityService(), LifecycleOwner, ViewModelSto
     }
 
     override fun onDestroy() {
+        instance = null
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         serviceViewModelStore.clear()
         hideFloatingWindow()

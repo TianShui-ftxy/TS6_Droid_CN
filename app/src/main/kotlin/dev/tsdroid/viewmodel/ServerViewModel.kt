@@ -175,7 +175,6 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
     var activeChatTab = 0
     var activePmUserId: Int? = null
 
-    private var serviceConnection: ServiceConnection? = null
     private var bound = false
 
     init {
@@ -219,94 +218,92 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun bindToService() {
         if (bound) return
-        val context = getApplication<Application>()
-        val conn = object : ServiceConnection {
-            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-                val binder = service as TsConnectionService.LocalBinder
-                tsClient = binder.tsClient
-                audioBridge = binder.audioBridge
-                audioBridge?.setMutedUserIds(_mutedUserIds.value)
-                connectionService = binder.service
-                queriedPermChannels.clear()
+        
+        viewModelScope.launch {
+            var attempts = 0
+            while (TsConnectionService.instance == null && attempts < 50) {
+                kotlinx.coroutines.delay(100)
+                attempts++
+            }
+            
+            val service = TsConnectionService.instance
+            if (service == null) {
+                Log.e(TAG, "Failed to bind to TsConnectionService: instance is null")
+                return@launch
+            }
 
-                viewModelScope.launch {
-                    binder.tsClient.channels.collect { channels ->
-                        Log.d(TAG, "Channels updated: ${channels.size}")
-                        _channels.value = channels
-                        loadChannelIcons(channels)
-                    }
+            tsClient = service.tsClient
+            audioBridge = service.audioBridge
+            audioBridge?.setMutedUserIds(_mutedUserIds.value)
+            connectionService = service
+            queriedPermChannels.clear()
+
+            viewModelScope.launch {
+                service.tsClient.channels.collect { channels ->
+                    Log.d(TAG, "Channels updated: ${channels.size}")
+                    _channels.value = channels
+                    loadChannelIcons(channels)
                 }
-                viewModelScope.launch {
-                    binder.tsClient.users.collect {
-                        _rawUsers.value = it
-                        loadAvatars(it)
-                    }
+            }
+            viewModelScope.launch {
+                service.tsClient.users.collect {
+                    _rawUsers.value = it
+                    loadAvatars(it)
                 }
-                viewModelScope.launch {
-                    var bookmarkUpdated = false
-                    binder.tsClient.serverInfo.collect { info ->
-                        _serverInfo.value = info
-                        if (info != null && !bookmarkUpdated) {
-                            bookmarkUpdated = true
-                            val addr = serverAddress ?: binder.tsClient.serverAddress ?: ""
-                            if (addr.isNotEmpty()) {
-                                bookmarkStore.updateServerInfo(addr, info.name, info.iconId)
-                                // Download server icon if needed
-                                if (info.iconId != 0L) {
-                                    iconCache.loadIcon(info.iconId, binder.tsClient)
-                                }
+            }
+            viewModelScope.launch {
+                var bookmarkUpdated = false
+                service.tsClient.serverInfo.collect { info ->
+                    _serverInfo.value = info
+                    if (info != null && !bookmarkUpdated) {
+                        bookmarkUpdated = true
+                        val addr = serverAddress ?: service.tsClient.serverAddress ?: ""
+                        if (addr.isNotEmpty()) {
+                            bookmarkStore.updateServerInfo(addr, info.name, info.iconId)
+                            // Download server icon if needed
+                            if (info.iconId != 0L) {
+                                iconCache.loadIcon(info.iconId, service.tsClient)
                             }
                         }
                     }
                 }
-                viewModelScope.launch {
-                    binder.tsClient.state.collect { _connectionState.value = it }
-                }
-                viewModelScope.launch {
-                    binder.tsClient.events.collect { handleEvent(it) }
-                }
-                viewModelScope.launch {
-                    binder.tsClient.commandErrors.collect { message ->
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
-                        }
+            }
+            viewModelScope.launch {
+                service.tsClient.state.collect { _connectionState.value = it }
+            }
+            viewModelScope.launch {
+                service.tsClient.events.collect { handleEvent(it) }
+            }
+            viewModelScope.launch {
+                service.tsClient.commandErrors.collect { message ->
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
                     }
                 }
-                // Load persisted messages
-                viewModelScope.launch {
-                    val addr = binder.tsClient.serverAddress
-                    if (!addr.isNullOrEmpty()) {
-                        serverAddress = addr
-                        val (channelMsgs, privateMsgs) = messageStore.load(addr)
-                        if (channelMsgs.isNotEmpty()) _channelMessages.value = channelMsgs.map { migrateMessage(it) }
-                        if (privateMsgs.isNotEmpty()) _privateMessages.value = privateMsgs.mapValues { (_, msgs) -> msgs.map { migrateMessage(it) } }
-                    }
-                }
-                // Start audio capture if not already running
-                if (!binder.audioBridge.isCapturing.value) {
-                    binder.audioBridge.startCapture(viewModelScope)
-                }
-                // Apply persisted audio gain
-                binder.audioBridge.gainFactor = audioGain.value
-                // Start event loop (guarded by AtomicBoolean — safe if already running)
-                viewModelScope.launch {
-                    binder.tsClient.eventLoop()
+            }
+            // Load persisted messages
+            viewModelScope.launch {
+                val addr = service.tsClient.serverAddress
+                if (!addr.isNullOrEmpty()) {
+                    serverAddress = addr
+                    val (channelMsgs, privateMsgs) = messageStore.load(addr)
+                    if (channelMsgs.isNotEmpty()) _channelMessages.value = channelMsgs.map { migrateMessage(it) }
+                    if (privateMsgs.isNotEmpty()) _privateMessages.value = privateMsgs.mapValues { (_, msgs) -> msgs.map { migrateMessage(it) } }
                 }
             }
-
-            override fun onServiceDisconnected(name: ComponentName?) {
-                tsClient = null
-                audioBridge = null
-                connectionService = null
+            // Start audio capture if not already running
+            if (!service.audioBridge.isCapturing.value) {
+                service.audioBridge.startCapture(viewModelScope)
             }
+            // Apply persisted audio gain
+            service.audioBridge.gainFactor = audioGain.value
+            // Start event loop (guarded by AtomicBoolean — safe if already running)
+            viewModelScope.launch {
+                service.tsClient.eventLoop()
+            }
+            
+            bound = true
         }
-        serviceConnection = conn
-        bound = true
-        context.bindService(
-            Intent(context, TsConnectionService::class.java),
-            conn,
-            Context.BIND_AUTO_CREATE,
-        )
     }
 
     private fun loadChannelIcons(channels: List<Channel>) {
@@ -836,14 +833,10 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
 
     override fun onCleared() {
         saveNow()
-        if (bound) {
-            serviceConnection?.let {
-                try {
-                    getApplication<Application>().unbindService(it)
-                } catch (_: Exception) {}
-            }
-            bound = false
-        }
+        bound = false
+        tsClient = null
+        audioBridge = null
+        connectionService = null
         super.onCleared()
     }
 

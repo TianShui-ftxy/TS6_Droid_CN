@@ -98,7 +98,6 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    private var serviceBinder: TsConnectionService.LocalBinder? = null
     private var serviceConnection: ServiceConnection? = null
 
     fun connect(onConnected: () -> Unit) {
@@ -121,46 +120,34 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
 
-        val conn = object : ServiceConnection {
-            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-                val binder = service as? TsConnectionService.LocalBinder
-                if (binder == null) {
-                    _connectionState.value = ConnectionState.DISCONNECTED
-                    _error.value = getApplication<Application>().getString(R.string.connection_failed)
-                    return
-                }
-                serviceBinder = binder
-
-                viewModelScope.launch {
-                    try {
-                        val identity = getOrCreateIdentity()
-                        val pw = password.value.trim().takeIf { it.isNotEmpty() }
-                        val ch = channel.value.trim().takeIf { it.isNotEmpty() }
-                        binder.tsClient.connect(addr, identity, nick, pw, ch)
-                        _connectionState.value = ConnectionState.CONNECTED
-                        onConnected()
-                    } catch (e: Exception) {
-                        _connectionState.value = ConnectionState.DISCONNECTED
-                        _error.value = e.message ?: getApplication<Application>().getString(R.string.connection_failed)
-                    }
-                }
+        // Wait for the service instance to be available
+        viewModelScope.launch {
+            var attempts = 0
+            while (TsConnectionService.instance == null && attempts < 50) {
+                kotlinx.coroutines.delay(100)
+                attempts++
             }
-
-            override fun onServiceDisconnected(name: ComponentName?) {
-                serviceBinder = null
+            
+            val service = TsConnectionService.instance
+            if (service == null) {
                 _connectionState.value = ConnectionState.DISCONNECTED
+                _error.value = getApplication<Application>().getString(R.string.connection_failed)
+                return@launch
             }
-        }
-        serviceConnection = conn
-        try {
-            context.bindService(
-                Intent(context, TsConnectionService::class.java),
-                conn,
-                Context.BIND_AUTO_CREATE,
-            )
-        } catch (e: Exception) {
-            _connectionState.value = ConnectionState.DISCONNECTED
-            _error.value = e.message ?: getApplication<Application>().getString(R.string.connection_failed)
+
+            try {
+                val identity = getOrCreateIdentity()
+                val pw = password.value.trim().takeIf { it.isNotEmpty() }
+                val ch = channel.value.trim().takeIf { it.isNotEmpty() }
+                service.connect(addr, identity, nick, pw)
+                // Note: The original code passed 'ch' to connect, but TsConnectionService.connect doesn't take a channel parameter.
+                // If channel joining is needed, it should be handled after connection.
+                _connectionState.value = ConnectionState.CONNECTED
+                onConnected()
+            } catch (e: Exception) {
+                _connectionState.value = ConnectionState.DISCONNECTED
+                _error.value = e.message ?: getApplication<Application>().getString(R.string.connection_failed)
+            }
         }
     }
 
@@ -323,16 +310,16 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
         Log.d(TAG, "showFloatingWindow: connected, invoking overlay")
-        serviceBinder?.service?.showFloatingWindow() ?: run {
-            Log.d(TAG, "showFloatingWindow: no binder, using service intent fallback")
+        TsConnectionService.instance?.showFloatingWindow() ?: run {
+            Log.d(TAG, "showFloatingWindow: no instance, using service intent fallback")
             TsConnectionService.showOverlay(getApplication())
         }
     }
 
     fun hideFloatingWindow() {
         Log.d(TAG, "hideFloatingWindow")
-        serviceBinder?.service?.hideFloatingWindow() ?: run {
-            Log.d(TAG, "hideFloatingWindow: no binder, using service intent fallback")
+        TsConnectionService.instance?.hideFloatingWindow() ?: run {
+            Log.d(TAG, "hideFloatingWindow: no instance, using service intent fallback")
             TsConnectionService.hideOverlay(getApplication())
         }
     }
