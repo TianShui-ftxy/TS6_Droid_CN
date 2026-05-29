@@ -120,7 +120,11 @@ fun ConnectionScreen(
         "en" to stringResource(R.string.language_english),
         "fr" to stringResource(R.string.language_french),
     )
-    val selectedLanguageTag by settingsStore.language.collectAsState(initial = "zh")
+    val persistedLanguageTag by settingsStore.language.collectAsState(initial = "zh")
+    var selectedLanguageTag by rememberSaveable { mutableStateOf(persistedLanguageTag) }
+    LaunchedEffect(persistedLanguageTag) {
+        selectedLanguageTag = persistedLanguageTag
+    }
     val selectedLanguage = languageOptions.firstOrNull { it.first == selectedLanguageTag }?.second
         ?: stringResource(R.string.language_simplified_chinese)
     var languageMenuExpanded by rememberSaveable { mutableStateOf(false) }
@@ -169,12 +173,13 @@ fun ConnectionScreen(
                                 DropdownMenuItem(
                                     text = { Text(languageLabel) },
                                     onClick = {
+                                        selectedLanguageTag = languageTag
+                                        languageMenuExpanded = false
                                         scope.launch {
                                             settingsStore.setLanguage(languageTag)
                                             updateAppLocale(context, languageTag)
                                             activity?.recreate()
                                         }
-                                        languageMenuExpanded = false
                                     },
                                 )
                             }

@@ -112,11 +112,22 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         _error.value = null
 
         val context = getApplication<Application>()
-        TsConnectionService.start(context)
+        try {
+            TsConnectionService.start(context)
+        } catch (e: Exception) {
+            _connectionState.value = ConnectionState.DISCONNECTED
+            _error.value = e.message ?: getApplication<Application>().getString(R.string.connection_failed)
+            return
+        }
 
         val conn = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-                val binder = service as TsConnectionService.LocalBinder
+                val binder = service as? TsConnectionService.LocalBinder
+                if (binder == null) {
+                    _connectionState.value = ConnectionState.DISCONNECTED
+                    _error.value = getApplication<Application>().getString(R.string.connection_failed)
+                    return
+                }
                 serviceBinder = binder
 
                 viewModelScope.launch {
@@ -140,11 +151,16 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
         serviceConnection = conn
-        context.bindService(
-            Intent(context, TsConnectionService::class.java),
-            conn,
-            Context.BIND_AUTO_CREATE,
-        )
+        try {
+            context.bindService(
+                Intent(context, TsConnectionService::class.java),
+                conn,
+                Context.BIND_AUTO_CREATE,
+            )
+        } catch (e: Exception) {
+            _connectionState.value = ConnectionState.DISCONNECTED
+            _error.value = e.message ?: getApplication<Application>().getString(R.string.connection_failed)
+        }
     }
 
     fun connectBookmark(bookmark: ServerBookmark, onConnected: () -> Unit) {
@@ -152,7 +168,13 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         nickname.value = bookmark.nickname
         password.value = bookmark.password ?: ""
         channel.value = bookmark.channel ?: ""
-        viewModelScope.launch { bookmarkStore.saveLastBookmarkAddress(bookmark.address) }
+        viewModelScope.launch {
+            try {
+                bookmarkStore.saveLastBookmarkAddress(bookmark.address)
+            } catch (_: Exception) {
+                // Ignore address save failure; connection may still proceed.
+            }
+        }
         connect(onConnected)
     }
 
