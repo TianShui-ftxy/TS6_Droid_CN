@@ -448,11 +448,11 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                         } else {
                             // No speaker: Show software logo
                             androidx.compose.foundation.Image(
-                                painter = androidx.compose.ui.res.painterResource(id = R.mipmap.ic_launcher),
+                                painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_launcher_foreground),
                                 contentDescription = "Open Panel",
                                 modifier = Modifier
                                     .align(Alignment.Center)
-                                    .fillMaxSize(0.6f)
+                                    .fillMaxSize(0.8f)
                             )
                         }
                     }
