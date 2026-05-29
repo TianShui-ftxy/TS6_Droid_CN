@@ -145,6 +145,7 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
         tsClient.state.onEach { state ->
             overlayConnected = state == dev.tslib.ConnectionState.CONNECTED
             updateOverlayChannelName()
+            updateNotification()
         }.launchIn(serviceScope)
 
         tsClient.users.onEach {

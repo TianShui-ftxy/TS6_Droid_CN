@@ -78,23 +78,30 @@ class TsClient {
         password: String? = null,
         channel: String? = null,
     ) = withContext(Dispatchers.IO) {
-        disconnect()
-        serverAddress = address
-        val c = Client(address, identity, nickname, password, channel)
-        client = c
-        _state.value = ConnectionState.CONNECTING
-        c.waitConnected()
-        _state.value = ConnectionState.CONNECTED
-        // Log immediately after waitConnected
-        val users = c.users
-        val channels = c.channels
-        Log.i(TAG, "After waitConnected: ${users?.size ?: "null"} users, ${channels?.size ?: "null"} channels")
-        if (users != null) {
-            for (u in users) {
-                if (u != null) Log.d(TAG, "  User: ${u.nickname} (id=${u.id}, ch=${u.channelId})")
+        try {
+            disconnect()
+            serverAddress = address
+            val c = Client(address, identity, nickname, password, channel)
+            client = c
+            _state.value = ConnectionState.CONNECTING
+            c.waitConnected()
+            _state.value = ConnectionState.CONNECTED
+            // Log immediately after waitConnected
+            val users = c.users
+            val channels = c.channels
+            Log.i(TAG, "After waitConnected: ${users?.size ?: "null"} users, ${channels?.size ?: "null"} channels")
+            if (users != null) {
+                for (u in users) {
+                    if (u != null) Log.d(TAG, "  User: ${u.nickname} (id=${u.id}, ch=${u.channelId})")
+                }
             }
+            refreshState()
+        } catch (e: Exception) {
+            Log.e(TAG, "Caught connection error gracefully", e)
+            _state.value = ConnectionState.DISCONNECTED
+            _commandErrors.tryEmit("服务器连接正忙，正在尝试重新握手...")
+            throw e // Re-throw to let the caller handle the retry/UI update
         }
-        refreshState()
     }
 
     suspend fun eventLoop() {

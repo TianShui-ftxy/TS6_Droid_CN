@@ -156,8 +156,14 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 service.connect(addr, identity, nick, pw)
                 // Note: The original code passed 'ch' to connect, but TsConnectionService.connect doesn't take a channel parameter.
                 // If channel joining is needed, it should be handled after connection.
-                _connectionState.value = ConnectionState.CONNECTED
-                onConnected()
+                
+                // Observe the actual connection state from the service
+                service.tsClient.state.collect { state ->
+                    _connectionState.value = state
+                    if (state == ConnectionState.CONNECTED) {
+                        onConnected()
+                    }
+                }
             } catch (e: Exception) {
                 _connectionState.value = ConnectionState.DISCONNECTED
                 _error.value = e.message ?: getApplication<Application>().getString(R.string.connection_failed)

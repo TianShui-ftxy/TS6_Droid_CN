@@ -108,6 +108,7 @@ fun ServerScreen(
     val showLinkThumbnails by viewModel.showLinkThumbnails.collectAsState()
     val autoLoadImages by viewModel.autoLoadImages.collectAsState()
     val enableFloatingWindow by viewModel.enableFloatingWindow.collectAsState()
+    val context = LocalContext.current
     val mutedUserIds by viewModel.mutedUserIds.collectAsState()
     val fileManagerOpen by viewModel.fileManagerOpen.collectAsState()
     val fileList by viewModel.fileList.collectAsState()
@@ -155,6 +156,17 @@ fun ServerScreen(
         }
     }
     if (connectionState == ConnectionState.DISCONNECTED) return
+
+    // Show floating window when entering ServerScreen if enabled
+    LaunchedEffect(enableFloatingWindow) {
+        if (enableFloatingWindow) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(context)) {
+                // Permission not granted, don't show
+            } else {
+                dev.tsdroid.service.TsConnectionService.instance?.showFloatingWindow()
+            }
+        }
+    }
 
     val totalUnread = unreadChannel + totalUnreadPrivate
 
