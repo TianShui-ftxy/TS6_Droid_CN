@@ -15,6 +15,7 @@ fun AppNavigation() {
                 onConnected = { navController.navigate("server") {
                     popUpTo("connection") { inclusive = true }
                 }},
+                onNavigateToAbout = { navController.navigate("about") }
             )
         }
         composable("server") {
@@ -22,6 +23,12 @@ fun AppNavigation() {
                 onDisconnected = { navController.navigate("connection") {
                     popUpTo("server") { inclusive = true }
                 }},
+                onNavigateToAbout = { navController.navigate("about") }
+            )
+        }
+        composable("about") {
+            AboutScreen(
+                onBack = { navController.popBackStack() }
             )
         }
     }

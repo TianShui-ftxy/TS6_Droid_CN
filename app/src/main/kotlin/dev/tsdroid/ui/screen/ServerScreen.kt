@@ -91,6 +91,7 @@ import kotlinx.coroutines.flow.StateFlow
 @Composable
 fun ServerScreen(
     onDisconnected: () -> Unit,
+    onNavigateToAbout: () -> Unit,
     viewModel: ServerViewModel = viewModel(),
 ) {
     val channels by viewModel.channels.collectAsState()
@@ -164,6 +165,8 @@ fun ServerScreen(
             } else {
                 dev.tsdroid.service.TsConnectionService.instance?.showFloatingWindow()
             }
+        } else {
+            dev.tsdroid.service.TsConnectionService.instance?.hideFloatingWindow()
         }
     }
 
@@ -180,6 +183,7 @@ fun ServerScreen(
             enableFloatingWindow = enableFloatingWindow,
             onEnableFloatingWindowChange = { viewModel.setEnableFloatingWindow(it) },
             onDismiss = { showSettings = false },
+            onNavigateToAbout = onNavigateToAbout
         )
     }
 
@@ -630,6 +634,7 @@ private fun SettingsDialog(
     enableFloatingWindow: Boolean,
     onEnableFloatingWindowChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
+    onNavigateToAbout: () -> Unit,
 ) {
     var sliderValue by remember(currentGain) { mutableFloatStateOf(currentGain) }
 
@@ -694,6 +699,16 @@ private fun SettingsDialog(
                         checked = enableFloatingWindow,
                         onCheckedChange = onEnableFloatingWindowChange,
                     )
+                }
+                Spacer(Modifier.height(16.dp))
+                TextButton(
+                    onClick = {
+                        onDismiss()
+                        onNavigateToAbout()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.about_software))
                 }
             }
         },

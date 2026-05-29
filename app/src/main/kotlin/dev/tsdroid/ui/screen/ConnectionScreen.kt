@@ -79,6 +79,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ConnectionScreen(
     onConnected: () -> Unit,
+    onNavigateToAbout: () -> Unit,
     viewModel: ConnectionViewModel = viewModel(),
 ) {
     val address by viewModel.address.collectAsState()
@@ -164,6 +165,14 @@ fun ConnectionScreen(
                                     },
                                 )
                             }
+                            androidx.compose.material3.Divider()
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.about_software)) },
+                                onClick = {
+                                    languageMenuExpanded = false
+                                    onNavigateToAbout()
+                                },
+                            )
                         }
                     }
                 },

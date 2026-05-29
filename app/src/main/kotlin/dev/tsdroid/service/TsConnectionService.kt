@@ -262,14 +262,26 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
     fun connect(address: String, identity: Identity, nickname: String, password: String?) {
         isIntentionalDisconnect = false
         serviceScope.launch {
-            tsClient.connect(address, identity, nickname, password)
-            audioBridge.startCapture(serviceScope)
-            // Sync initial mute state with server
-            if (audioBridge.isMuted.value) {
-                tsClient.setInputMuted(true)
+            try {
+                tsClient.connect(address, identity, nickname, password)
+                audioBridge.startCapture(serviceScope)
+                // Sync initial mute state with server
+                if (audioBridge.isMuted.value) {
+                    tsClient.setInputMuted(true)
+                }
+                // Start event loop
+                tsClient.startEventLoop()
+            } catch (e: Exception) {
+                Log.e(TAG, "Connection error", e)
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        applicationContext,
+                        "Connection failed: ${e.message}",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+                disconnect()
             }
-            // Start event loop
-            tsClient.startEventLoop()
         }
     }
 
@@ -496,8 +508,8 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                 // --- EXPANDED MINIMALIST PANEL ---
                 Card(
                     modifier = Modifier
-                        .width(240.dp)
-                        .height(300.dp),
+                        .width(200.dp)
+                        .height(240.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = CardBackgroundTransparent), // Blends flawlessly over game/desktop backgrounds
                     border = BorderStroke(1.dp, Color(0x33FFFFFF)),
