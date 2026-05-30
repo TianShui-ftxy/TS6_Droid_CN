@@ -404,8 +404,10 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
                         if (text.contains("滥用保护") || 
                             text.contains("abuse protection") ||
                             text.contains("flood protection") ||
+                            text.contains("spam protection") ||
                             text.contains("Cannot perform this action due to") ||
-                            text.contains("无法采取此动作")) {
+                            text.contains("无法采取此动作") ||
+                            text.contains("Action currently not possible")) {
                             Log.i(TAG, "Skipping system abuse protection message: $text")
                             return
                         }
