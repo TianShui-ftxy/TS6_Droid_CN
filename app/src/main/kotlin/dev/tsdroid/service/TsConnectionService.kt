@@ -117,6 +117,11 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
     private var pendingSpeakerId: Int? = null
     private var speakerUpdateJob: kotlinx.coroutines.Job? = null
     
+    // Delay mechanism for local user speaking state changes
+    private var pendingLocalSpeaking: Boolean? = null
+    private var localSpeakingJob: kotlinx.coroutines.Job? = null
+    private var delayedLocalSpeaking by mutableStateOf(false)
+    
     private lateinit var avatarCache: AvatarCache
 
     // Overlay state
@@ -219,6 +224,22 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
 
         tsClient.channels.onEach {
             updateOverlayChannelName()
+        }.launchIn(serviceScope)
+        
+        // Listen to local voice activity and apply delay mechanism
+        audioBridge.isLocalVoiceActive.onEach { isSpeaking ->
+            // Cancel any pending local speaking state change
+            localSpeakingJob?.cancel()
+            pendingLocalSpeaking = isSpeaking
+            
+            // Delay local speaking state update to avoid flickering
+            localSpeakingJob = serviceScope.launch {
+                delay(SPEAKER_DELAY_MS)
+                // Only update if still the pending state
+                if (pendingLocalSpeaking == isSpeaking) {
+                    delayedLocalSpeaking = isSpeaking
+                }
+            }
         }.launchIn(serviceScope)
     }
 
@@ -394,12 +415,28 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                 val isOutputMuted by audioBridge.isOutputMuted.collectAsState()
                 val isLocalVoiceActive by audioBridge.isLocalVoiceActive.collectAsState()
                 
+                // Listen to local voice activity and apply delay mechanism
+                LaunchedEffect(isLocalVoiceActive) {
+                    // Cancel any pending local speaking state change
+                    localSpeakingJob?.cancel()
+                    pendingLocalSpeaking = isLocalVoiceActive
+                    
+                    // Delay local speaking state update to avoid flickering
+                    localSpeakingJob = kotlinx.coroutines.launch {
+                        delay(SPEAKER_DELAY_MS)
+                        // Only update if still the pending state
+                        if (pendingLocalSpeaking == isLocalVoiceActive) {
+                            delayedLocalSpeaking = isLocalVoiceActive
+                        }
+                    }
+                }
+                
                 FloatingOverlayContent(
                     connected = overlayConnected,
                     channelName = overlayChannelName,
                     activeSpeakerName = overlayActiveSpeakerName,
                     activeSpeakerAvatar = overlayActiveSpeakerAvatar,
-                    isLocalVoiceActive = isLocalVoiceActive,
+                    isLocalVoiceActive = delayedLocalSpeaking,
                     isExpanded = isOverlayExpanded,
                     onToggleExpand = { 
                         overlayLayoutParams?.let { layout ->
