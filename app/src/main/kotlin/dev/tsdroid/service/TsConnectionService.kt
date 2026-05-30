@@ -382,6 +382,24 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                             } catch (_: Exception) {}
                         }
                     },
+                    onSizeChange = { w, h ->
+                        overlayLayoutParams?.let { layout ->
+                            val metrics = resources.displayMetrics
+                            val maxX = metrics.widthPixels - w
+                            val maxY = metrics.heightPixels - h
+
+                            val newX = layout.x.coerceIn(0, maxOf(0, maxX))
+                            val newY = layout.y.coerceIn(0, maxOf(0, maxY))
+
+                            if (layout.x != newX || layout.y != newY) {
+                                layout.x = newX
+                                layout.y = newY
+                                try {
+                                    windowManager.updateViewLayout(this, layout)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    },
                     channels = channels,
                     users = users,
                     isMicMuted = isMicMuted,
@@ -447,6 +465,7 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
         isExpanded: Boolean,
         onToggleExpand: () -> Unit,
         onDrag: (Float, Float) -> Unit,
+        onSizeChange: (Int, Int) -> Unit,
         channels: List<Channel>,
         users: List<User>,
         isMicMuted: Boolean,
@@ -468,6 +487,7 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
             modifier = Modifier
                 .wrapContentSize()
                 .background(Color.Transparent) // Force the root container token to be 100% transparent
+                .androidx.compose.ui.layout.onSizeChanged { size -> onSizeChange(size.width, size.height) }
         ) {
             if (!isExpanded) {
                 // --- COLLAPSED AVATAR BUBBLE ---
