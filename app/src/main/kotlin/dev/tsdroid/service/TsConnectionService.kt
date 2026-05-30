@@ -547,7 +547,7 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
             if (!isExpanded) {
                 // --- COLLAPSED AVATAR BUBBLE ---
                 // If local user is speaker, rely on true voice activity; else just activeSpeakerName
-                val isLocalSpeaker = overlayActiveSpeakerId == myId || myId != null && activeSpeakerName == users.find { it.id == myId }?.nickname
+                val isLocalSpeaker = myId != null && users.find { it.id == myId }?.nickname == activeSpeakerName
                 val isSpeaking = if (isLocalSpeaker) isLocalVoiceActive else !activeSpeakerName.isNullOrEmpty()
                 
                 val borderColor = if (isSpeaking) Color(0xFF2196F3) else Color(0x4DFFFFFF)

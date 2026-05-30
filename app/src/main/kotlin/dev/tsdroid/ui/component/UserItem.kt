@@ -114,7 +114,7 @@ fun UserItem(
                     modifier = Modifier.size(24.dp)
                 ) {
                     Icon(
-                        if (isLocallyMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.Default.MicOff,
+                        Icons.AutoMirrored.Filled.VolumeOff,
                         contentDescription = stringResource(if (isLocallyMuted) R.string.unmute_user else R.string.mute_user),
                         modifier = Modifier.size(16.dp),
                         tint = if (isLocallyMuted) Color(0xFFFF9800) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),

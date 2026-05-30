@@ -415,6 +415,7 @@ fun ConnectionScreen(
                         placeholder = { Text(stringResource(R.string.server_address_placeholder)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        maxLines = 1,
                         enabled = !isConnecting,
                     )
 
@@ -424,6 +425,7 @@ fun ConnectionScreen(
                         label = { Text(stringResource(R.string.nickname)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        maxLines = 1,
                         enabled = !isConnecting,
                     )
 
@@ -433,6 +435,7 @@ fun ConnectionScreen(
                         label = { Text(stringResource(R.string.password_optional)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        maxLines = 1,
                         enabled = !isConnecting,
                         visualTransformation = PasswordVisualTransformation(),
                     )
@@ -444,6 +447,7 @@ fun ConnectionScreen(
                         placeholder = { Text(stringResource(R.string.default_channel)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        maxLines = 1,
                         enabled = !isConnecting,
                         trailingIcon = {
                             if (isBrowsing) {
