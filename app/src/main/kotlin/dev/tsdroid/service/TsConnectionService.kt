@@ -238,6 +238,24 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                 // Only update if still the pending state
                 if (pendingLocalSpeaking == isSpeaking) {
                     delayedLocalSpeaking = isSpeaking
+                    
+                    // Force refresh local user avatar when speaking starts
+                    if (isSpeaking) {
+                        val myId = tsClient.clientId
+                        val localUser = tsClient.users.value.find { it.id == myId }
+                        val localUid = localUser?.uid
+                        if (!localUid.isNullOrEmpty()) {
+                            serviceScope.launch(Dispatchers.IO) {
+                                avatarCache.loadAvatar(localUid, tsClient)
+                                val avatar = avatarCache.getAvatar(localUid)
+                                withContext(Dispatchers.Main) {
+                                    if (overlayActiveSpeakerId == myId) {
+                                        overlayActiveSpeakerAvatar = avatar
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }.launchIn(serviceScope)
@@ -616,9 +634,10 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                 // For display purposes, if local user is speaking, show their info
                 val shouldShowAvatar = if (isLocalUserSpeaking) {
                     // Try to get local user avatar
+                    val myId = tsClient.clientId
                     val localUser = users.find { it.id == myId }
                     val localUid = localUser?.uid
-                    if (!localUid.isNullOrEmpty() && avatarCache.getAvatar(localUid) != null) {
+                    if (!localUid.isNullOrEmpty()) {
                         avatarCache.getAvatar(localUid)
                     } else {
                         activeSpeakerAvatar
