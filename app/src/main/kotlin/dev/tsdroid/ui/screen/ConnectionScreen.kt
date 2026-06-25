@@ -530,4 +530,5 @@ fun ConnectionScreen(
             }
         }
     }
+    }
 }
