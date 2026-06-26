@@ -6,6 +6,23 @@
 
 ---
 
+## 项目演示
+
+<div align="center">
+<table>
+  <tr>
+    <td align="center"><img src="img/screenshow1.jpg" width="240"/></td>
+    <td align="center"><img src="img/screenshow2.jpg" width="240"/></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="img/screenshow3.jpg" width="240"/></td>
+    <td align="center"><img src="img/screenshow4.jpg" width="240"/></td>
+  </tr>
+</table>
+</div>
+
+---
+
 ## 更新日志
 
 ### v2.0.0-Han（2026-06-26）
@@ -37,27 +54,16 @@
 - 壁纸切换不再闪烁：缓存机制 + 600ms 淡入动画
 - 切页不再触发重新获取，全局共享同一张壁纸
 - 首页空列表居中显示「暂无连接」
-- 设置页内容与 TopAppBar 标题动态匹配
 
 **文件管理器图片预览**
 - 点击图片文件直接在应用内全屏预览，不再弹出外部打开方式
 
 **Bug 修复**
 - 修复 Config#HARDWARE bitmap 无法 getPixel 导致闪退
-- 修复设置页开关在页面切换时跳动闪烁（保持组合树不重建）
+- 修复设置页开关在页面切换时跳动闪烁
 - 修复 SettingsDialog 残留代码导致编译错误
 - 修复窗口背景色导致的灰色底色问题
-- 修复所有组件中的 GlassColors 硬编码颜色，统一使用 M3 token
-
----
-
-### v1.1.5-Han
-
-- 麦克风自动降噪功能
-- 动漫随机背景壁纸（「我是二刺螈」开关）
-- 底部半透明毛玻璃效果
-- 连接页底部导航栏
-- 关于页面贡献者名单（GitHub API）
+- 统一所有组件使用 M3 颜色 token
 
 ---
 
